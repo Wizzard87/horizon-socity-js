@@ -100,3 +100,26 @@ export const followUser = asyncHandler(async (req, res) => {
     message: isFollowing ? "User unfollowed successfully" : "User followed successfully",
   });
 });
+
+export const searchUsers = asyncHandler(async (req, res) => {
+  const { q } = req.query;
+  if (!q || q.trim().length === 0) {
+    return res.status(200).json({ users: [] });
+  }
+
+  // Remove @ if user typed it
+  const searchQuery = q.startsWith("@") ? q.slice(1) : q;
+
+  const users = await User.find({
+    $or: [
+      { username: { $regex: searchQuery, $options: "i" } },
+      { firstName: { $regex: searchQuery, $options: "i" } },
+      { lastName: { $regex: searchQuery, $options: "i" } },
+    ],
+  })
+    .limit(20)
+    .select("username firstName lastName profilePicture verified bio");
+
+  res.status(200).json({ users });
+});
+
