@@ -2,6 +2,9 @@ import { Message } from "../models/message.model.js";
 import { Conversation } from "../models/conversation.model.js";
 import User from "../models/user.model.js";
 import { getAuth } from "@clerk/express";
+import { Expo } from "expo-server-sdk";
+
+const expo = new Expo();
 
 // Send a new message or create a conversation if it doesn't exist
 export const sendMessage = async (req, res) => {
@@ -36,6 +39,24 @@ export const sendMessage = async (req, res) => {
     await conversation.save();
 
     res.status(201).json(newMessage);
+
+    // Dispatch Expo Push Notification
+    try {
+      const receiverUser = await User.findById(receiverId);
+      if (receiverUser && receiverUser.pushToken && Expo.isExpoPushToken(receiverUser.pushToken)) {
+        const pushMessages = [{
+          to: receiverUser.pushToken,
+          sound: "default",
+          title: `New message from ${user.firstName}`,
+          body: text,
+          data: { conversationId: conversation._id },
+        }];
+        await expo.sendPushNotificationsAsync(pushMessages);
+      }
+    } catch (pushError) {
+      console.error("Failed to send Expo Push Notification:", pushError);
+    }
+
   } catch (error) {
     console.error("Error in sendMessage:", error);
     res.status(500).json({ message: "Server error" });
