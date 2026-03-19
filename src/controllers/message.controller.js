@@ -1,0 +1,79 @@
+import { Message } from "../models/message.model.js";
+import { Conversation } from "../models/conversation.model.js";
+
+// Send a new message or create a conversation if it doesn't exist
+export const sendMessage = async (req, res) => {
+  try {
+    const { receiverId, text } = req.body;
+    const senderId = req.user._id;
+
+    if (!receiverId || !text) {
+      return res.status(400).json({ message: "Receiver ID and text are required" });
+    }
+
+    let conversation = await Conversation.findOne({
+      participants: { $all: [senderId, receiverId] },
+    });
+
+    if (!conversation) {
+      conversation = await Conversation.create({
+        participants: [senderId, receiverId],
+      });
+    }
+
+    const newMessage = await Message.create({
+      conversationId: conversation._id,
+      sender: senderId,
+      text,
+    });
+
+    conversation.lastMessage = newMessage._id;
+    await conversation.save();
+
+    res.status(201).json(newMessage);
+  } catch (error) {
+    console.error("Error in sendMessage:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Get all conversations for the current user
+export const getConversations = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    const conversations = await Conversation.find({ participants: userId })
+      .populate("participants", "name username avatar verified")
+      .populate("lastMessage", "text createdAt")
+      .sort({ updatedAt: -1 });
+
+    res.status(200).json(conversations);
+  } catch (error) {
+    console.error("Error in getConversations:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Get all messages for a specific conversation
+export const getMessages = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user._id;
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ message: "Conversation not found" });
+    }
+    
+    if (!conversation.participants.includes(userId)) {
+      return res.status(403).json({ message: "Not authorized to view these messages" });
+    }
+
+    const messages = await Message.find({ conversationId }).sort({ createdAt: 1 });
+    
+    res.status(200).json(messages);
+  } catch (error) {
+    console.error("Error in getMessages:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};

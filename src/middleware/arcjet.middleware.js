@@ -16,10 +16,8 @@ export const arcjetMiddleware = async (req, res, next) => {
           message: "Rate limit exceeded. Please try again later.",
         });
       } else if (decision.reason.isBot()) {
-        return res.status(403).json({
-          error: "Bot access denied",
-          message: "Automated requests are not allowed.",
-        });
+        console.warn("Bot detected by Arcjet, but allowing request for native app compatibility.");
+        // Do not return 403 here so native clients aren't blocked
       } else {
         return res.status(403).json({
           error: "Forbidden",
