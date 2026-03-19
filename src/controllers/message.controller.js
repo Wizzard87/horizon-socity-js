@@ -51,7 +51,7 @@ export const getConversations = async (req, res) => {
     const userId = user._id;
     
     const conversations = await Conversation.find({ participants: userId })
-      .populate("participants", "name username avatar verified")
+      .populate("participants", "firstName lastName username profilePicture verified bio")
       .populate("lastMessage", "text createdAt")
       .sort({ updatedAt: -1 });
 
@@ -76,7 +76,7 @@ export const getMessages = async (req, res) => {
       return res.status(404).json({ message: "Conversation not found" });
     }
     
-    if (!conversation.participants.includes(userId)) {
+    if (!conversation.participants.some(p => p.toString() === userId.toString())) {
       return res.status(403).json({ message: "Not authorized to view these messages" });
     }
 
