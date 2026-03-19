@@ -1,11 +1,16 @@
 import { Message } from "../models/message.model.js";
 import { Conversation } from "../models/conversation.model.js";
+import User from "../models/user.model.js";
+import { getAuth } from "@clerk/express";
 
 // Send a new message or create a conversation if it doesn't exist
 export const sendMessage = async (req, res) => {
   try {
     const { receiverId, text } = req.body;
-    const senderId = req.user._id;
+    const { userId: clerkId } = getAuth(req);
+    const user = await User.findOne({ clerkId });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const senderId = user._id;
 
     if (!receiverId || !text) {
       return res.status(400).json({ message: "Receiver ID and text are required" });
@@ -40,7 +45,10 @@ export const sendMessage = async (req, res) => {
 // Get all conversations for the current user
 export const getConversations = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const { userId: clerkId } = getAuth(req);
+    const user = await User.findOne({ clerkId });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const userId = user._id;
     
     const conversations = await Conversation.find({ participants: userId })
       .populate("participants", "name username avatar verified")
@@ -58,7 +66,10 @@ export const getConversations = async (req, res) => {
 export const getMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const userId = req.user._id;
+    const { userId: clerkId } = getAuth(req);
+    const user = await User.findOne({ clerkId });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const userId = user._id;
 
     const conversation = await Conversation.findById(conversationId);
     if (!conversation) {

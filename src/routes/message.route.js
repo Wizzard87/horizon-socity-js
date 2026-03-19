@@ -1,10 +1,10 @@
 import express from "express";
-import { requireAuth } from "../middleware/auth.middleware.js";
+import { protectRoute } from "../middleware/auth.middleware.js";
 import { sendMessage, getConversations, getMessages } from "../controllers/message.controller.js";
 
 const router = express.Router();
 
-router.use(requireAuth);
+router.use(protectRoute);
 
 router.post("/", sendMessage);
 router.get("/conversations", getConversations);
