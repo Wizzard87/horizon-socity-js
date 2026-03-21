@@ -2,6 +2,9 @@ import asyncHandler from "express-async-handler";
 import NewsPost from "../models/newsPost.model.js";
 import User from "../models/user.model.js";
 import { getAuth } from "@clerk/express";
+import { Expo } from "expo-server-sdk";
+
+const expo = new Expo();
 
 export const getNewsPosts = asyncHandler(async (req, res) => {
   const posts = await NewsPost.find()
@@ -37,4 +40,31 @@ export const createNewsPost = asyncHandler(async (req, res) => {
   );
 
   res.status(201).json({ post: populated });
+
+  // Broadcast push notification to all users (non-blocking)
+  try {
+    const usersWithTokens = await User.find({
+      pushToken: { $ne: "" },
+    }).select("pushToken");
+
+    const pushMessages = usersWithTokens
+      .filter((u) => Expo.isExpoPushToken(u.pushToken))
+      .map((u) => ({
+        to: u.pushToken,
+        sound: "default",
+        title: "Horizon News",
+        body: content.trim().length > 100 ? content.trim().slice(0, 100) + "…" : content.trim(),
+        data: { type: "news", postId: post._id },
+      }));
+
+    if (pushMessages.length > 0) {
+      const chunks = expo.chunkPushNotifications(pushMessages);
+      for (const chunk of chunks) {
+        await expo.sendPushNotificationsAsync(chunk);
+      }
+    }
+  } catch (pushError) {
+    console.error("Failed to send news push notifications:", pushError);
+  }
 });
+
