@@ -166,3 +166,47 @@ export const deletePost = asyncHandler(async (req, res) => {
 
   res.status(200).json({ message: "Post deleted successfully" });
 });
+
+export const updatePost = asyncHandler(async (req, res) => {
+  const { userId } = getAuth(req);
+  const { postId } = req.params;
+  const { content } = req.body;
+  const imageFile = req.file;
+
+  const user = await User.findOne({ clerkId: userId });
+  const post = await Post.findById(postId);
+
+  if (!user || !post) return res.status(404).json({ error: "User or post not found" });
+
+  if (post.user.toString() !== user._id.toString()) {
+    return res.status(403).json({ error: "You can only edit your own posts" });
+  }
+
+  if (content !== undefined) {
+    post.content = content;
+  }
+
+  // upload new image to Cloudinary if provided
+  if (imageFile) {
+    try {
+      const base64Image = `data:${imageFile.mimetype};base64,${imageFile.buffer.toString("base64")}`;
+      const uploadResponse = await cloudinary.uploader.upload(base64Image, {
+        folder: "social_media_posts",
+        resource_type: "image",
+        transformation: [
+          { width: 800, height: 600, crop: "limit" },
+          { quality: "auto" },
+          { format: "auto" },
+        ],
+      });
+      post.image = uploadResponse.secure_url;
+    } catch (uploadError) {
+      console.error("Cloudinary upload error:", uploadError);
+      return res.status(400).json({ error: "Failed to upload image" });
+    }
+  }
+
+  await post.save();
+
+  res.status(200).json({ post });
+});
