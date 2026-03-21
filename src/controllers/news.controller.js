@@ -3,6 +3,7 @@ import NewsPost from "../models/newsPost.model.js";
 import User from "../models/user.model.js";
 import { getAuth } from "@clerk/express";
 import { Expo } from "expo-server-sdk";
+import cloudinary from "../config/cloudinary.js";
 
 const expo = new Expo();
 
@@ -29,9 +30,29 @@ export const createNewsPost = asyncHandler(async (req, res) => {
     return res.status(403).json({ error: "Only admins can post news" });
   }
 
+  let fileUrl = "";
+  let fileName = "";
+
+  if (req.file) {
+    try {
+      const base64File = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+      const uploadResponse = await cloudinary.uploader.upload(base64File, {
+        folder: "news_files",
+        resource_type: "raw",
+      });
+      fileUrl = uploadResponse.secure_url;
+      fileName = req.file.originalname || "file.apk";
+    } catch (uploadError) {
+      console.error("Cloudinary file upload error:", uploadError);
+      return res.status(400).json({ error: "Failed to upload file" });
+    }
+  }
+
   const post = await NewsPost.create({
     content: content.trim(),
     author: user._id,
+    fileUrl,
+    fileName,
   });
 
   const populated = await post.populate(
@@ -67,4 +88,5 @@ export const createNewsPost = asyncHandler(async (req, res) => {
     console.error("Failed to send news push notifications:", pushError);
   }
 });
+
 
