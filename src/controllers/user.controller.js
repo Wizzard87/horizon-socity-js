@@ -119,7 +119,7 @@ export const searchUsers = asyncHandler(async (req, res) => {
     ],
   })
     .limit(20)
-    .select("username firstName lastName profilePicture verified bio");
+    .select("username firstName lastName profilePicture verified bio lastActive");
 
   res.status(200).json({ users });
 });
