@@ -1,6 +1,7 @@
 import asyncHandler from "express-async-handler";
 import User from "../models/user.model.js";
 import Notification from "../models/notification.model.js";
+import SiteStats from "../models/siteStats.model.js";
 
 import { getAuth } from "@clerk/express";
 import { clerkClient } from "@clerk/express";
@@ -136,4 +137,29 @@ export const registerPushToken = asyncHandler(async (req, res) => {
   if (!user) return res.status(404).json({ error: "User not found" });
 
   res.status(200).json({ message: "Push token registered successfully" });
+});
+
+export const getOnlineStats = asyncHandler(async (req, res) => {
+  // Users active in the last 5 minutes are considered "online"
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+  const onlineCount = await User.countDocuments({ lastActive: { $gte: fiveMinutesAgo } });
+
+  // Get or create global stats
+  let stats = await SiteStats.findOne({ key: "global" });
+  if (!stats) {
+    stats = await SiteStats.create({ key: "global", peakOnline: onlineCount, peakOnlineAt: new Date() });
+  }
+
+  // Update peak if current online exceeds it
+  if (onlineCount > stats.peakOnline) {
+    stats.peakOnline = onlineCount;
+    stats.peakOnlineAt = new Date();
+    await stats.save();
+  }
+
+  res.status(200).json({
+    online: onlineCount,
+    peakOnline: stats.peakOnline,
+    peakOnlineAt: stats.peakOnlineAt,
+  });
 });
