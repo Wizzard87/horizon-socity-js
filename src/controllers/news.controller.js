@@ -4,6 +4,12 @@ import User from "../models/user.model.js";
 import { getAuth } from "@clerk/express";
 import { Expo } from "expo-server-sdk";
 import cloudinary from "../config/cloudinary.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const expo = new Expo();
 
@@ -35,15 +41,36 @@ export const createNewsPost = asyncHandler(async (req, res) => {
 
   if (req.file) {
     try {
-      const base64File = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-      const uploadResponse = await cloudinary.uploader.upload(base64File, {
-        folder: "news_files",
-        resource_type: "raw",
-      });
-      fileUrl = uploadResponse.secure_url;
-      fileName = req.file.originalname || "file.apk";
+      const isApk = req.file.originalname.toLowerCase().endsWith(".apk") || 
+                    req.file.mimetype === "application/vnd.android.package-archive" ||
+                    req.file.mimetype === "application/octet-stream";
+
+      if (isApk) {
+        // Сохраняем APK локально в папку uploads
+        const safeName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, "_")}`;
+        const filePath = path.join(__dirname, "../../uploads", safeName);
+        
+        fs.writeFileSync(filePath, req.file.buffer);
+        
+        // Формируем URL. Используем заголовок host, чтобы работало и локально, и на домене.
+        const host = req.get("host");
+        const protocol = req.protocol === "https" || req.get("x-forwarded-proto") === "https" ? "https" : "http";
+        fileUrl = `${protocol}://${host}/uploads/${safeName}`;
+        fileName = req.file.originalname;
+        console.log("APK saved locally:", fileUrl);
+      } else {
+        // Картинки по-прежнему грузим в Cloudinary
+        const base64File = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+        const uploadResponse = await cloudinary.uploader.upload(base64File, {
+          folder: "news_files",
+          resource_type: "auto", // auto handles images/videos
+        });
+        fileUrl = uploadResponse.secure_url;
+        fileName = req.file.originalname || "image";
+        console.log("Image uploaded to Cloudinary:", fileUrl);
+      }
     } catch (uploadError) {
-      console.error("Cloudinary file upload error:", uploadError);
+      console.error("File upload error:", uploadError);
       return res.status(400).json({ error: "Failed to upload file" });
     }
   }

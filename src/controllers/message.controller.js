@@ -4,6 +4,7 @@ import User from "../models/user.model.js";
 import { getAuth } from "@clerk/express";
 import { Expo } from "expo-server-sdk";
 import cloudinary from "../config/cloudinary.js";
+import { encrypt, decrypt } from "../utils/crypto.js";
 
 const expo = new Expo();
 
@@ -56,14 +57,14 @@ export const sendMessage = async (req, res) => {
     const newMessage = await Message.create({
       conversationId: conversation._id,
       sender: senderId,
-      text: text || "",
+      text: encrypt(text || ""),
       image: imageUrl,
     });
 
     conversation.lastMessage = newMessage._id;
     await conversation.save();
 
-    res.status(201).json(newMessage);
+    res.status(201).json({ ...newMessage.toObject(), text: text || "" });
 
     // Dispatch Expo Push Notification
     try {
@@ -105,10 +106,10 @@ export const updateMessage = async (req, res) => {
       return res.status(403).json({ message: "You can only edit your own messages" });
     }
 
-    message.text = text;
+    message.text = encrypt(text);
     await message.save();
 
-    res.status(200).json(message);
+    res.status(200).json({ ...message.toObject(), text });
   } catch (error) {
     console.error("Error in updateMessage:", error);
     res.status(500).json({ message: "Server error" });
@@ -161,7 +162,16 @@ export const getConversations = async (req, res) => {
       .populate("lastMessage", "text image createdAt")
       .sort({ updatedAt: -1 });
 
-    res.status(200).json(conversations);
+    // Decrypt last message text for each conversation
+    const decryptedConversations = conversations.map(conv => {
+      const convObj = conv.toObject();
+      if (convObj.lastMessage) {
+        convObj.lastMessage.text = decrypt(convObj.lastMessage.text);
+      }
+      return convObj;
+    });
+
+    res.status(200).json(decryptedConversations);
   } catch (error) {
     console.error("Error in getConversations:", error);
     res.status(500).json({ message: "Server error" });
@@ -188,7 +198,14 @@ export const getMessages = async (req, res) => {
 
     const messages = await Message.find({ conversationId }).sort({ createdAt: 1 });
     
-    res.status(200).json(messages);
+    // Decrypt all messages
+    const decryptedMessages = messages.map(msg => {
+      const msgObj = msg.toObject();
+      msgObj.text = decrypt(msgObj.text);
+      return msgObj;
+    });
+    
+    res.status(200).json(decryptedMessages);
   } catch (error) {
     console.error("Error in getMessages:", error);
     res.status(500).json({ message: "Server error" });
