@@ -40,15 +40,23 @@ export const createNewsPost = asyncHandler(async (req, res) => {
   let fileName = "";
 
   if (req.file) {
+    console.log("File received in news controller:", {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
     try {
       const isApk = req.file.originalname.toLowerCase().endsWith(".apk") || 
                     req.file.mimetype === "application/vnd.android.package-archive" ||
                     req.file.mimetype === "application/octet-stream";
 
+      console.log("isApk check:", isApk);
+
       if (isApk) {
         // Сохраняем APK локально в папку uploads
         const safeName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, "_")}`;
         const filePath = path.join(__dirname, "../../uploads", safeName);
+        console.log("Full save path:", filePath);
         
         fs.writeFileSync(filePath, req.file.buffer);
         
@@ -70,8 +78,8 @@ export const createNewsPost = asyncHandler(async (req, res) => {
         console.log("Image uploaded to Cloudinary:", fileUrl);
       }
     } catch (uploadError) {
-      console.error("File upload error:", uploadError);
-      return res.status(400).json({ error: "Failed to upload file" });
+      console.error("Detailed File upload error:", uploadError);
+      return res.status(400).json({ error: "Failed to upload file", details: uploadError.message });
     }
   }
 
@@ -114,6 +122,77 @@ export const createNewsPost = asyncHandler(async (req, res) => {
   } catch (pushError) {
     console.error("Failed to send news push notifications:", pushError);
   }
+});
+
+export const updateNewsPost = asyncHandler(async (req, res) => {
+  const { postId } = req.params;
+  const { content } = req.body;
+  const { userId } = getAuth(req);
+
+  const user = await User.findOne({ clerkId: userId });
+  if (!user || !user.isAdmin) {
+    return res.status(403).json({ error: "Only admins can edit news" });
+  }
+
+  const post = await NewsPost.findById(postId);
+  if (!post) {
+    return res.status(404).json({ error: "News post not found" });
+  }
+
+  if (content) post.content = content.trim();
+  await post.save();
+
+  const populated = await post.populate(
+    "author",
+    "username firstName lastName profilePicture isAdmin"
+  );
+
+  res.status(200).json({ post: populated });
+});
+
+export const deleteNewsPost = asyncHandler(async (req, res) => {
+  const { postId } = req.params;
+  const { userId } = getAuth(req);
+
+  const user = await User.findOne({ clerkId: userId });
+  if (!user || !user.isAdmin) {
+    return res.status(403).json({ error: "Only admins can delete news" });
+  }
+
+  const post = await NewsPost.findById(postId);
+  if (!post) {
+    return res.status(404).json({ error: "News post not found" });
+  }
+
+  // Delete associated file if it exists
+  if (post.fileUrl) {
+    if (post.fileUrl.includes("/uploads/")) {
+      // Local APK
+      try {
+        const fileName = post.fileUrl.split("/").pop();
+        const filePath = path.join(__dirname, "../../uploads", fileName);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (err) {
+        console.error("Error deleting local APK:", err);
+      }
+    } else if (post.fileUrl.includes("cloudinary.com")) {
+      // Cloudinary image
+      try {
+        const urlParts = post.fileUrl.split("/");
+        const fileNameWithExt = urlParts.pop();
+        const publicId = fileNameWithExt.split(".")[0];
+        // The folder was 'news_files'
+        await cloudinary.uploader.destroy(`news_files/${publicId}`);
+      } catch (err) {
+        console.error("Error deleting Cloudinary file:", err);
+      }
+    }
+  }
+
+  await NewsPost.findByIdAndDelete(postId);
+  res.status(200).json({ message: "News post deleted successfully" });
 });
 
 

@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import { getNewsPosts, createNewsPost } from "../controllers/news.controller.js";
+import { getNewsPosts, createNewsPost, updateNewsPost, deleteNewsPost } from "../controllers/news.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
@@ -14,7 +14,9 @@ const newsUpload = multer({
 // public — anyone can read news
 router.get("/", getNewsPosts);
 
-// protected — only admins can post (checked in controller)
+// protected — only admins can post/edit/delete (checked in controller)
 router.post("/", protectRoute, newsUpload.single("file"), createNewsPost);
+router.put("/:postId", protectRoute, updateNewsPost);
+router.delete("/:postId", protectRoute, deleteNewsPost);
 
 export default router;
